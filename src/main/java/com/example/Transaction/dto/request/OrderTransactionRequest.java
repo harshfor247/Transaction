@@ -1,20 +1,19 @@
 package com.example.Transaction.dto.request;
 
 import com.example.Transaction.enums.OrderPayment;
-import com.example.Transaction.enums.PaymentMode;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
+@NoArgsConstructor
 @Builder
-public class TransactionRequest {
+public class OrderTransactionRequest {
 
     private Long userId;
     private Long orderId;
     private Double amount;
-    private PaymentMode paymentMode;
+    private OrderPayment orderPayment;
 }

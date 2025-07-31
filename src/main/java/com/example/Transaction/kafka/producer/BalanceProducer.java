@@ -12,6 +12,6 @@ public class BalanceProducer {
     private final KafkaTemplate<String, UserBalanceUpdatedResponse> kafkaTemplate;
 
     public void sendUpdatedBalance(UserBalanceUpdatedResponse userBalanceUpdatedResponse) {
-        kafkaTemplate.send("balance-response", userBalanceUpdatedResponse);
+        kafkaTemplate.send("balance-response", userBalanceUpdatedResponse.getUserId().toString(), userBalanceUpdatedResponse);
     }
 }

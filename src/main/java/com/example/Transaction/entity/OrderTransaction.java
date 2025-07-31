@@ -1,7 +1,8 @@
-package com.example.Transaction.dto.request;
+package com.example.Transaction.entity;
 
 import com.example.Transaction.enums.OrderPayment;
-import com.example.Transaction.enums.PaymentMode;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -11,10 +12,13 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class TransactionRequest {
+@Entity
+public class OrderTransaction {
 
+    @Id
     private Long userId;
+
     private Long orderId;
     private Double amount;
-    private PaymentMode paymentMode;
+    private OrderPayment orderPayment;
 }

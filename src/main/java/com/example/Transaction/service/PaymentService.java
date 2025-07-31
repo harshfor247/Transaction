@@ -3,58 +3,112 @@ package com.example.Transaction.service;
 import com.example.Transaction.dto.request.TransactionRequest;
 import com.example.Transaction.dto.response.TransactionResponse;
 import com.example.Transaction.dto.response.UserBalanceUpdatedResponse;
+import com.example.Transaction.entity.OrderTransaction;
+import com.example.Transaction.entity.Transaction;
+import com.example.Transaction.entity.UserBalance;
 import com.example.Transaction.enums.PaymentMode;
 import com.example.Transaction.enums.PaymentStatus;
-import com.example.Transaction.kafka.consumer.BalanceConsumer;
 import com.example.Transaction.kafka.producer.BalanceProducer;
+import com.example.Transaction.repository.OrderTransactionRepository;
+import com.example.Transaction.repository.TransactionRepository;
+import com.example.Transaction.repository.UserBalanceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class PaymentService {
 
-    private final BalanceConsumer balanceConsumer;
+    private final TransactionRepository transactionRepository;
+    private final OrderTransactionRepository orderTransactionRepository;
+    private final UserBalanceRepository userBalanceRepository;
     private final BalanceProducer balanceProducer;
 
     public TransactionResponse processPayment(TransactionRequest transactionRequest) {
         Long userId = transactionRequest.getUserId();
+        Long orderId = transactionRequest.getOrderId();
+        Double amount = transactionRequest.getAmount();
         PaymentMode paymentMode = transactionRequest.getPaymentMode();
-        double price = transactionRequest.getAmount();
 
-        if (paymentMode == null || price <= 0 || price > 100000) {
-            return buildResponse(transactionRequest.getOrderId(), PaymentStatus.FAILURE);
+        // Check if transaction already exists for this order
+        List<Transaction> transaction = transactionRepository.findByOrderId(orderId);
+        if (transaction != null && !transaction.isEmpty()) {
+            for (Transaction txn : transaction) {
+                PaymentStatus status = txn.getPaymentStatus();
+                if (PaymentStatus.SUCCESS.equals(status) || status == null) {
+                    throw new RuntimeException("Payment already done or status unknown for the order");
+                }
+            }
         }
 
-        Double userBalance = balanceConsumer.getBalanceMap().get(userId);
-
-        if (userBalance == null || userBalance < price) {
-            return buildResponse(transactionRequest.getOrderId(), PaymentStatus.FAILURE);
+        // Fetch all OrderTransactions by user
+        List<OrderTransaction> userOrders = orderTransactionRepository.findByUserId(userId);
+        if (userOrders == null || userOrders.isEmpty()) {
+            return saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
         }
 
+        // Filter order by orderId and amount
+        OrderTransaction matchingOrder = userOrders.stream()
+                .filter(o -> o.getOrderId().equals(orderId) && o.getAmount().equals(amount))
+                .findFirst()
+                .orElse(null);
+
+        if (matchingOrder == null) {
+            return saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
+        }
+
+        // Basic validations
+        if (paymentMode == null || amount <= 0 || amount > 100000) {
+            return saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
+        }
+
+        // Check user balance
+        Optional<UserBalance> optional = userBalanceRepository.findById(userId);
+        if (optional.isEmpty() || optional.get().getBalance() < amount) {
+            return saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
+        }
+
+        UserBalance userBalance = optional.get();
+        double currentBalance = userBalance.getBalance();
+
+        // Simulate payment success (80% chance)
         boolean isSuccess = Math.random() > 0.2;
+        PaymentStatus status = isSuccess ? PaymentStatus.SUCCESS : PaymentStatus.FAILURE;
 
         if (isSuccess) {
-            double remaining = userBalance - price;
+            double remaining = currentBalance - amount;
+            userBalance.setBalance(remaining);
+            userBalanceRepository.save(userBalance);
 
-            // Update in map
-            balanceConsumer.getBalanceMap().put(userId, remaining);
-
-            // Send to balanceResponse topic
-            UserBalanceUpdatedResponse userBalanceUpdatedResponse = UserBalanceUpdatedResponse.builder()
+            UserBalanceUpdatedResponse updatedResponse = UserBalanceUpdatedResponse.builder()
                     .userId(userId)
                     .updatedUserBalance(remaining)
                     .build();
-            balanceProducer.sendUpdatedBalance(userBalanceUpdatedResponse);
+
+            balanceProducer.sendUpdatedBalance(updatedResponse);
         }
 
-        return buildResponse(transactionRequest.getOrderId(), isSuccess ? PaymentStatus.SUCCESS : PaymentStatus.FAILURE);
+        return saveAndBuildResponse(transactionRequest, status);
     }
 
-    private TransactionResponse buildResponse(Long orderId, PaymentStatus paymentStatus) {
+    private TransactionResponse saveAndBuildResponse(TransactionRequest req, PaymentStatus status) {
+        Transaction saved = transactionRepository.save(Transaction.builder()
+                .userId(req.getUserId())
+                .orderId(req.getOrderId())
+                .amount(req.getAmount())
+                .paymentMode(req.getPaymentMode())
+                .paymentStatus(status)
+                .build());
+
         return TransactionResponse.builder()
-                .orderId(orderId)
-                .paymentStatus(paymentStatus)
+                .transactionId(saved.getTransactionId())
+                .userId(saved.getUserId())
+                .orderId(saved.getOrderId())
+                .amount(saved.getAmount())
+                .paymentStatus(saved.getPaymentStatus())
                 .build();
     }
 }

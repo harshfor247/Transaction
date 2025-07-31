@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class UserBalanceUpdatedResponse {
+public class    UserBalanceUpdatedResponse {
 
     private Long userId;
     private Double updatedUserBalance;
