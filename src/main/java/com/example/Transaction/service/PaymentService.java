@@ -2,6 +2,7 @@ package com.example.Transaction.service;
 
 import com.example.Transaction.dto.request.TransactionRequest;
 import com.example.Transaction.dto.response.TransactionResponse;
+import com.example.Transaction.dto.response.UpdatedOrderResponse;
 import com.example.Transaction.dto.response.UserBalanceUpdatedResponse;
 import com.example.Transaction.entity.OrderTransaction;
 import com.example.Transaction.entity.Transaction;
@@ -9,6 +10,7 @@ import com.example.Transaction.entity.UserBalance;
 import com.example.Transaction.enums.PaymentMode;
 import com.example.Transaction.enums.PaymentStatus;
 import com.example.Transaction.kafka.producer.BalanceProducer;
+import com.example.Transaction.kafka.producer.PaymentProducer;
 import com.example.Transaction.repository.OrderTransactionRepository;
 import com.example.Transaction.repository.TransactionRepository;
 import com.example.Transaction.repository.UserBalanceRepository;
@@ -26,6 +28,7 @@ public class PaymentService {
     private final OrderTransactionRepository orderTransactionRepository;
     private final UserBalanceRepository userBalanceRepository;
     private final BalanceProducer balanceProducer;
+    private final PaymentProducer paymentProducer;
 
     public TransactionResponse processPayment(TransactionRequest transactionRequest) {
         Long userId = transactionRequest.getUserId();
@@ -61,7 +64,7 @@ public class PaymentService {
         }
 
         // Basic validations
-        if (paymentMode == null || amount <= 0 || amount > 100000) {
+        if (paymentMode == null || amount <= 0) {
             return saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
         }
 
@@ -72,15 +75,16 @@ public class PaymentService {
         }
 
         UserBalance userBalance = optional.get();
-        double currentBalance = userBalance.getBalance();
+        Double currentBalance = userBalance.getBalance();
 
         // Simulate payment success (80% chance)
         boolean isSuccess = Math.random() > 0.2;
         PaymentStatus status = isSuccess ? PaymentStatus.SUCCESS : PaymentStatus.FAILURE;
 
         if (isSuccess) {
-            double remaining = currentBalance - amount;
+            Double remaining = currentBalance - amount;
             userBalance.setBalance(remaining);
+
             userBalanceRepository.save(userBalance);
 
             UserBalanceUpdatedResponse updatedResponse = UserBalanceUpdatedResponse.builder()
@@ -102,6 +106,16 @@ public class PaymentService {
                 .paymentMode(req.getPaymentMode())
                 .paymentStatus(status)
                 .build());
+
+        UpdatedOrderResponse updatedOrderResponse = new UpdatedOrderResponse();
+
+        updatedOrderResponse.setTransactionId(saved.getTransactionId());
+        updatedOrderResponse.setUserId(saved.getUserId());
+        updatedOrderResponse.setOrderId(saved.getOrderId());
+        updatedOrderResponse.setAmount(saved.getAmount());
+        updatedOrderResponse.setPaymentStatus(status);
+
+        paymentProducer.sendPaymentResult(updatedOrderResponse);
 
         return TransactionResponse.builder()
                 .transactionId(saved.getTransactionId())

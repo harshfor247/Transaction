@@ -1,6 +1,6 @@
 package com.example.Transaction.kafka.producer;
 
-import com.example.Transaction.dto.response.TransactionResponse;
+import com.example.Transaction.dto.response.UpdatedOrderResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -9,9 +9,9 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class PaymentProducer {
 
-    private final KafkaTemplate<String, TransactionResponse> kafkaTemplate;
+    private final KafkaTemplate<String, UpdatedOrderResponse> kafkaTemplate;
 
-    public void sendPaymentResult(TransactionResponse transactionResponse) {
-        kafkaTemplate.send("payment-response", transactionResponse);
+    public void sendPaymentResult(UpdatedOrderResponse updatedOrderResponse) {
+        kafkaTemplate.send("payment-response", updatedOrderResponse);
     }
 }

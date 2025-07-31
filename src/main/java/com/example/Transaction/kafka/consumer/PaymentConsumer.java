@@ -29,9 +29,5 @@ public class PaymentConsumer {
         orderTransaction.setAmount(orderTransactionRequest.getAmount());
         orderTransaction.setOrderPayment(orderTransactionRequest.getOrderPayment());
         orderTransactionRepository.save(orderTransaction);
-        log.info("Listening for payment for user {}", orderTransactionRequest.getUserId());
-        TransactionRequest transactionRequest = new TransactionRequest();
-        TransactionResponse transactionResponse = paymentService.processPayment(transactionRequest);
-        producer.sendPaymentResult(transactionResponse);
     }
 }
