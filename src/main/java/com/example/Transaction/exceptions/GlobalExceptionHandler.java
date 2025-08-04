@@ -11,7 +11,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(PaymentAlreadyDoneException.class)
     public ResponseEntity<ErrorResponse> handlePaymentAlreadyDoneException(PaymentAlreadyDoneException ex){
         ErrorResponse error = new ErrorResponse(ex.getMessage());
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler(TransactionFailedException.class)

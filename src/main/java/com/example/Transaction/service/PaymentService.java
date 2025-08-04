@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -66,6 +67,7 @@ public class PaymentService {
             saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
             throw new TransactionFailedException("Payment Failed due to invalid order Id or invalid amount!");
         }
+
 
         // Basic validations
         if (paymentMode == null || amount <= 0) {
