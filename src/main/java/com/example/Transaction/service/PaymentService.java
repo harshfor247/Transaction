@@ -9,6 +9,8 @@ import com.example.Transaction.entity.Transaction;
 import com.example.Transaction.entity.UserBalance;
 import com.example.Transaction.enums.PaymentMode;
 import com.example.Transaction.enums.PaymentStatus;
+import com.example.Transaction.exceptions.PaymentAlreadyDoneException;
+import com.example.Transaction.exceptions.TransactionFailedException;
 import com.example.Transaction.kafka.producer.BalanceProducer;
 import com.example.Transaction.kafka.producer.PaymentProducer;
 import com.example.Transaction.repository.OrderTransactionRepository;
@@ -41,8 +43,8 @@ public class PaymentService {
         if (transaction != null && !transaction.isEmpty()) {
             for (Transaction txn : transaction) {
                 PaymentStatus status = txn.getPaymentStatus();
-                if (PaymentStatus.SUCCESS.equals(status) || status == null) {
-                    throw new RuntimeException("Payment already done or status unknown for the order");
+                if (status.equals(PaymentStatus.SUCCESS) || status == null) {
+                    throw new PaymentAlreadyDoneException("Payment already done or no such Order!");
                 }
             }
         }
@@ -50,7 +52,8 @@ public class PaymentService {
         // Fetch all OrderTransactions by user
         List<OrderTransaction> userOrders = orderTransactionRepository.findByUserId(userId);
         if (userOrders == null || userOrders.isEmpty()) {
-            return saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
+            saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
+            throw new TransactionFailedException("Payment Failed due to no such order!");
         }
 
         // Filter order by orderId and amount
@@ -60,26 +63,36 @@ public class PaymentService {
                 .orElse(null);
 
         if (matchingOrder == null) {
-            return saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
+            saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
+            throw new TransactionFailedException("Payment Failed due to invalid order Id or invalid amount!");
         }
 
         // Basic validations
         if (paymentMode == null || amount <= 0) {
-            return saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
+            saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
+            throw new TransactionFailedException("Payment Failed due to invalid payment mode or amount!");
         }
 
         // Check user balance
         Optional<UserBalance> optional = userBalanceRepository.findById(userId);
-        if (optional.isEmpty() || optional.get().getBalance() < amount) {
-            return saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
+        if (optional.isEmpty()) {
+            saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
+            throw new TransactionFailedException("Payment Failed as user not  found!");
         }
 
         UserBalance userBalance = optional.get();
         Double currentBalance = userBalance.getBalance();
 
+        if(currentBalance < amount){
+            saveAndBuildResponse(transactionRequest, PaymentStatus.FAILURE);
+            throw new TransactionFailedException("Payment Failed due to insufficient balance!");
+        }
+
         // Simulate payment success (80% chance)
         boolean isSuccess = Math.random() > 0.2;
         PaymentStatus status = isSuccess ? PaymentStatus.SUCCESS : PaymentStatus.FAILURE;
+
+        TransactionResponse response = saveAndBuildResponse(transactionRequest, status);
 
         if (isSuccess) {
             Double remaining = currentBalance - amount;
@@ -93,9 +106,11 @@ public class PaymentService {
                     .build();
 
             balanceProducer.sendUpdatedBalance(updatedResponse);
-        }
 
-        return saveAndBuildResponse(transactionRequest, status);
+            return response;
+        } else{
+            throw new TransactionFailedException("Payment Failed! Try again later.");
+        }
     }
 
     private TransactionResponse saveAndBuildResponse(TransactionRequest req, PaymentStatus status) {
